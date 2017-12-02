@@ -1,64 +1,13 @@
 #from __future__ import print_function
 import tensorflow as tf
 import numpy as np
-import game
+
 import ctypes
 import time
 import os
 
-#For testing purposes
-n_input_neurons = 2
-n_output_neurons = 2
-
-n_neurons = np.array([n_input_neurons, 10, n_output_neurons])
-
-i_v = tf.placeholder(tf.float32, [None, n_input_neurons], "Input_values")
-e_v = tf.placeholder(tf.float32, [None, n_output_neurons], "Expected_values")
-
-#define helper functions for generating weights and biases
-def gen_weights(x, y):
-	weights = tf.Variable(tf.truncated_normal([x, y], stddev=1./tf.sqrt(2.)))
-	return weights
-
-def gen_biases(x):
-	bias  = tf.Variable(tf.zeros([x]))
-	return bias
-
-#initialize weights and biases in arrays
-weights = []
-biases = []
-
-for i in range(n_neurons.size - 1):
-	weights.append(gen_weights(n_neurons[i], n_neurons[i + 1]))
-	biases.append(gen_biases(n_neurons[i + 1]))
-
-values = []
-
-#Generate first layer value with the i_v
-values.append(i_v)
-#Generate hidden layer value with prev values in the values list
-for i in range(0, n_neurons.size - 1):
-	prev_layer = values[i]
-
-	if(i > 0):
-		prev_layer = tf.nn.relu(values[i])
-
-	layer_value = tf.matmul(prev_layer, weights[i]) + biases[i]
-
-	values.append(layer_value)
-
-
-#Generate last layer value without the ReLU
-output = values[n_neurons.size - 1]
-prop = tf.nn.softmax(output) * 100
-
-#Set the cost and trainign step
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=e_v))
-train_step = tf.train.GradientDescentOptimizer(0.2).minimize(cost)
-
-#Training data
-XOR_X = [[0,0],[0,1],[1,0],[1,1]]
-XOR_Y = [[1,0],[0,1],[0,1],[1,0]]
+import game
+import neuralnet
 
 # Enable multithreading?
 MULTITHREAD = True
@@ -136,38 +85,44 @@ def get_best_move(m):
 def movename(move):
     return ['u', 'd', 'l', 'r'][move]
 
+net = neuralnet.NeuralNet([2, 10, 10, 10, 2])
+#Training data
+XOR_X = [[0,0],[0,1],[1,0],[1,1]]
+XOR_Y = [[1,0],[0,1],[0,1],[1,0]]
+
+
 with tf.Session() as sess:
 	sess.run(tf.global_variables_initializer())
 
 	currGame = game.Map(4, 4, 2)
 	reset = game.Map(4, 4, 2)
 	r = 0
-	for i in range(1000):
-		p = currGame.get_random_empty()
-		if p == 0:
-			currGame = reset
-			r += 1
+	for i in range(3000):
+		#p = currGame.get_random_empty()
+		#if p == 0:
+			#currGame = reset
+			#r += 1
 
 		#Get the best move
-		m = movename(get_best_move(currGame.data))
-		print("BEST MOVE: ", m)
+		#m = movename(get_best_move(currGame.data))
+		#print("BEST MOVE: ", m)
 
 		#Train data on move
 		#i_v = m.data & e_v = best_move
-		#sess.run(train_step, feed_dict={i_v: XOR_X, e_v: XOR_Y})
+		sess.run(net.train_step, feed_dict={net.input_placeholder: XOR_X, net.expected_placeholder: XOR_Y})
 
-		if(currGame.move(m) == 1):
-			currGame.set_cell(p[0], p[1], game.new_cell_value())
+		#if(currGame.move(m) == 1):
+			#currGame.set_cell(p[0], p[1], game.new_cell_value())
 
-		currGame.print_map()
+		#currGame.print_map()
 
 
-		if i % 1000 == 0:
+		if (i + 1) % 1000 == 0:
 			for x_input in [[0, 0], [0, 1], [1, 0], [1, 1]]:
-				print (x_input, sess.run(prop, feed_dict={i_v: [x_input]}))
-			print('Epoch ', i)
+				print (x_input, sess.run(net.softmax_output, feed_dict={net.input_placeholder: XOR_X, net.expected_placeholder: XOR_Y}))
+			print('Epoch ', i + 1)
 			#print('Hypothesis ', sess.run(output, feed_dict={i_n: XOR_X, o_n: XOR_Y}))
 			#print('Theta1 ', sess.run(weight1))
 			#print('Theta2 ', sess.run(weight2))
-			print('cost ', sess.run(cost, feed_dict={i_v: XOR_X, e_v: XOR_Y}))
+			print('cost ', sess.run(net.cost, feed_dict={net.input_placeholder: XOR_X, net.expected_placeholder: XOR_Y}))
 	print(r)
