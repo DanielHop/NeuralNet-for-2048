@@ -9,8 +9,7 @@ import os
 import gamemanager as manager
 import neuralnet
 
-# Enable multithreading?
-
+# load the algorithm for getting the best move
 for suffix in ['so', 'dll', 'dylib']:
     dllfn = 'bin/2048.' + suffix
     if not os.path.isfile(dllfn):
@@ -27,6 +26,7 @@ ailib.find_best_move.argtypes = [ctypes.c_uint64]
 ailib.score_toplevel_move.argtypes = [ctypes.c_uint64, ctypes.c_int]
 ailib.score_toplevel_move.restype = ctypes.c_float
 
+# Define the find_best_move() function
 MULTITHREAD = True
 
 if MULTITHREAD:
@@ -51,11 +51,12 @@ else:
         return ailib.find_best_move(board)
 
 
-net = neuralnet.NeuralNet([2, 10, 10, 10, 2])
+
 #Training data
 XOR_X = [[0,0],[0,1],[1,0],[1,1]]
 XOR_Y = [[1,0],[0,1],[0,1],[1,0]]
 
+net = neuralnet.NeuralNet([2, 10, 10, 10, 2])
 
 with tf.Session() as sess:
 	sess.run(tf.global_variables_initializer())
