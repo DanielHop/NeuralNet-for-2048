@@ -216,7 +216,7 @@ def to_score(m):
 
 
 def get_best_move(m):
-	return find_best_move(m)
+    return find_best_move(m)
 
 def movename(move):
     return ['u', 'd', 'l', 'r'][move]
