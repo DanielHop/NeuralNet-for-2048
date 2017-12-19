@@ -1,5 +1,6 @@
 import sys
 from random import randint, random
+import numpy as np
 import copy, time
 
 class _Getch:
@@ -35,154 +36,227 @@ class _GetchWindows:
         import msvcrt
         return msvcrt.getch()
 
-class Map:
-    data = None
-    height = None
-    width = None
+class Game2048(object):
+    """
+    Abstraction of the 2048 game.
+    Paramters
+    ---------
+    size : int in [2, 4, 8], optional (default None)
+        Size of game board.
+    grid : 2D array of shape (size, size), optional (default None)
+        Values to initialize game board (useful for cloning game instances)
+    mode : string in ["arrows", "letters"], optional (default "arrows")
+        Specifies how input is presented to the game.
+    mover : callable, optional (default None)
+        Returns next move to be made. If none, next moves will asked at the
+        stdin as game play proceeds.
+    """
 
-    def __init__(self, h, w, start_count, copy_from=None):
-        if copy_from:
-            self.height = copy_from.height
-            self.width = copy_from.width
-            self.data = [row[:] for row in copy_from.data]
-            self.movements = copy_from.movements
-            return
-
-        if h == 0 or w == 0:
-            raise Exception("Wrong dimensions.")
-
-        self.height = h
-        self.width = w
-
-        self.movements = self.generate_movements()
-
-        self.data = [[0 for i in range(self.width)] for j in range(self.height)]
-        for i in range(min(start_count, self.height*self.width)):
-            x, y = self.get_random_empty()
-            self.data[x][y] = 1
-
-    def get_random_empty(self):
-        squares = self.height*self.width
-        start_n = n = randint(0, squares-1)
-        k = 0
-        while True:
-            i = int(k/self.width)
-            j = k%self.width
-            if self.data[i][j] == 0:
-                if n == 0:
-                    return [i, j]
-                n -= 1
-            k +=1
-            if k == squares:
-                if n == start_n: #no empty
-                    return None
-                k = 0
-
-    def set_cell(self, x, y, value):
-        self.data[x][y] = value
-
-    def get_empty_cells(self):
-        cells = []
-        for i in range(self.height):
-            for j in range(self.width):
-                if self.data[i][j] == 0:
-                    cells.append([i, j])
-        return cells
-
-    def print_map(self, nl=True):
-        print ("+-----"*self.width, "+")
-        for i in range(self.height):
-            d = ""
-            for j in range(self.width):
-                if self.data[i][j] == 0:
-                    d += "|    "
-                else:
-                    d += "|%4d"%(self.data[i][j])
-            print(d)
-            print ("|")
-            print ("+-----"*self.width + "+")
-        if nl:
-            print ("")
-
-    def is_valid(self, x, y):
-        return x >= 0 and x < self.height and y >= 0 and y < self.width
-
-    def generate_movements(self):
-        return {'l': [[x, y] for x in range(0, self.height) for y in range(0, self.width, 1)],
-                'r': [[x, y] for x in range(0, self.height) for y in range(self.width-1, -1, -1)],
-                'd': [[y, x] for x in range(0, self.width) for y in range(self.height-1, -1, -1)],
-                'u': [[y, x] for x in range(0, self.width) for y in range(0, self.height, 1)]}
-
-    def move(self, direction='l'):
-        di, dj = {'l': [0, -1], 'r': [0, +1], 'd': [1, 0], 'u':[-1, 0]}[direction]
-        mov = self.movements[direction]
-
-        merged = {}
-        m = self.data
-        t = [[m[x][y] for y in range(len(m[0]))] for x in range(len(m))]
-
-        for i, j in mov:
-            while self.is_valid(i+di, j+dj) and m[i+di][j+dj] == 0:
-                merged[(i+di, j+dj)] = True
-                m[i+di][j+dj] = m[i][j]
-                m[i][j] = 0
-                j += dj
-                i += di
-            if self.is_valid(i+di, j+dj) and m[i+di][j+dj] == m[i][j] and \
-                    not merged.get((i+di, j+dj)):
-                merged[(i+di, j+dj)] = True
-                m[i+di][j+dj] += 1
-                m[i][j] = 0
-
-        if( t == m):
-            print("illegal")
-            return -1
-        self.data = m
-        return 1
+    def __init__(self, size=None, grid=None, random_state=None, mode='arrows',
+                 mover=None):
+        # misc
+        if not mode in ["arrows", "letters"]:
+            raise ValueError("Invalid mode: %s" % mode)
+        self.mode = mode
+        self.size = size
+        self.grid = grid
+        self.mover = mover
+        self.random_state = random_state
+        self.banner_printed_ = False
+        self.aborted_ = False
+        self._load_batteries()
 
 
-    def get_copy(self):
-        return Map(0, 0, 0, copy_from=self)
+    def _load_batteries(self):
+        """Some serious conf business."""
+        self.rng_ = np.random.RandomState(self.random_state)
 
-    def equal(self, map):
-        if self.height != map.height or self.width != map.width:
-            return False
+        # get size of grid
+        if self.size is None:
+            if not self.grid is None:
+                self.size = len(self.grid)
+            self.print_banner()
+            while not self.size in SIZES:
+                try:
+                    self.size = int(INPUT_GRABBER(
+                        ("<> Enter game size (can be %s):"
+                         " ") % ", ".join([str(s) for s in SIZES])))
+                except ValueError:
+                    continue
 
-        for i in range(self.height):
-            for j in range(self.width):
-                if self.data[i][j] != map.data[i][j]:
-                    return False
-
-        return True
-
-def new_cell_value():
-    if random() > 0.1:
-        return 1
-    else:
-        return 2
-
-def play(height=4, width=4, init=2):
-    getch = _Getch()
-    keys = {"j":"d", "h":"l", "k":"r", "u":"u"}
-    print( "Press h for left, k for right, j for down and u for up.")
-    m = Map(height, width, init)
-    while True:
-        m.print_map()
-        char = getch()
-        if char == "q":
-            break
-        if char not in keys:
-            print ("Unknown char.")
-            continue
-        m.move(keys[char])
-
-        p = m.get_random_empty()
-        if p:
-            m.set_cell(p[0], p[1], new_cell_value())
+        # make grid
+        if self.grid is None:
+            self.grid_ = np.zeros((self.size, self.size), dtype=int)
+            indices = list(np.ndindex((self.size, self.size)))
+            support = self.rng_.choice(range(len(indices)), 2)
+            self.grid_[indices[support[0]][0], indices[support[0]][1]] = 2
+            self.grid_[indices[support[0]][1],
+                       indices[support[1]][1]] = self.rng_.choice([2, 4])
         else:
-            print ("You loose")
-            break
+            self.grid_ = np.array(self.grid, dtype=int).copy()
 
+    def get_params(self):
+        """Get all parameters of class instance."""
+        return dict(size=self.size, grid=self.grid_.copy(),
+                    random_state=self.random_state)
+
+    def clone(self):
+        """Clone class instance."""
+        return Game2048(**self.get_params())
+
+    def __eq__(self, other):
+        """Compare game with another instance."""
+        return np.all(self.grid_ == other.grid_)
+
+    def __ne__(self, other):
+        """Compare game with another instance."""
+        return np.any(self.grid_ != other.grid_)
+
+    def get_move(self):
+        """Get next move from input sensor (screen, etc.)."""
+        if not self.mover is None:
+            mv = self.mover(self.clone())
+            print("<> Performing %s" % [k for k, v in MOVES.items()
+                                        if v == mv][0])
+        elif self.mode == "arrows":
+            mv = GetArrow()()
+            if not mv is None:
+                mv = MOVES[mv]
+        else:
+            while not mv in ["I", "J", "K", "L"]:
+                mv = INPUT_GRABBER(("<> Enter direction for movement "
+                                    "(I=u,J=left,K=down, L=right) : "))
+
+                # check empty line
+                if not mv:
+                    mv = None
+        return mv
+
+    def __repr__(self):
+        """Converts "2048" board to a string."""
+        out = ""
+        line = None
+        for line in [[(str(x) if x else "").center(6) + "|" for x in line]
+                     for line in self.grid_]:
+            line = "|%s" % "".join(line)
+            out += "%s\n" % line
+            out += "%s\n" % ("-" * len(line))
+        out = "%s\n%s" % ("-" * len(line), out)
+        return out
+
+    def evolve(self):
+        """Fill a random empty cell with 2 (or 4, with very small proba)."""
+        z = np.where(self.grid_ == 0.)
+        i = self.rng_.choice(len(z[0]))
+        self.grid_[z[0][i], z[1][i]] = self.rng_.choice([2, 4], p=[.9, .1])
+        return self
+
+    def _squeeze(self, v, down=True):
+        """Reorganize vector into a contiguous chunk of nonzero stuff, padded
+        with zeros."""
+        nz = [x for x in v if x]
+        if down:
+            return np.append(np.zeros(len(v) - len(nz)), nz)
+        else:
+            return np.append(nz, np.zeros(len(v) - len(nz)))
+
+    def _vertical_move(self, down=True):
+        """Helper method for doing up and down moves."""
+        places = range(self.size)
+        places = places[:0:-1] if down else places[:-1]
+        for j in range(self.size):
+            col = self._squeeze(self.grid_[:, j], down=down)
+            for i in places:
+                salt = 1 - 2 * down
+                if col[i] == col[i + salt]:
+                    # merge cells (i, j) and (i + salt, j)
+                    col[i] *= 2
+                    col[i + salt] = 0
+                    col = self._squeeze(col, down=down)
+            self.grid_[:, j] = col
+        return self
+
+    def up(self):
+        """Perform upward move."""
+        return self._vertical_move(down=False)
+
+    def down(self):
+        """Perform downward move."""
+        return self._vertical_move(down=True)
+
+    def _horizontal_move(self, right=True):
+        """Helper method for doing left and right moves.
+        The trick is to simply do a horizontal movement on the transpose
+        game."""
+        params = self.get_params()
+        params["grid"] = self.grid_.T
+        self.grid_ = Game2048(**params)._vertical_move(down=right).grid_.T
+        return self
+
+    def left(self):
+        """Perform leftward move."""
+        return self._horizontal_move(right=False)
+
+    def right(self):
+        """Perform rightward move."""
+        return self._horizontal_move(right=True)
+
+    def move(self, mv):
+        """Make specified move."""
+        if mv == "u":
+            return self.up()
+        elif mv == "l":
+            return self.left()
+        elif mv == "d":
+            return self.down()
+        elif mv == "r":
+            return self.right()
+        else:
+            raise ValueError("Invalid move: %s" % mv)
+
+    @property
+    def score(self):
+        """Get running score."""
+        return np.max(self.grid_)
+
+    @property
+    def full(self):
+        """Check whether grid is full."""
+        return np.all(self.grid_ != 0.)
+
+    @property
+    def ended(self):
+        """Check whether game has ended."""
+        if self.aborted_ or self.score >= 2048:
+            return True
+        else:
+            # dead-end detection
+            for mv in MOVES.values():
+                game = self.clone().move(mv)
+                if game != self:
+                    return False
+            return True
+
+    def play(self):
+        """Play game."""
+
+        while not self.ended:
+            print(self)
+            while True:
+                mv = self.get_move()
+                old_game = self.clone()
+                game = self.clone()
+                if mv is None:
+                    print("Game aborted by user")
+                    game.aborted_ = True
+                    break
+                game.move(mv)
+                if game != old_game:
+                    break
+            self.grid_ = game.grid_
+            if self.ended:
+                break
+            self.evolve()
 
 def to_c_board(m):
     board = 0
@@ -220,8 +294,5 @@ def get_best_move(m):
 
 def movename(move):
     return ['u', 'd', 'l', 'r'][move]
-
-if __name__ == "__main__":
-    play(4, 4)
 
 #print "ciao"
