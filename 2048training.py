@@ -56,7 +56,10 @@ def transpose_board(board, heighest):
 
     for x in range(len(board)):
         for y in range(len(board[x])):
-            b2.append(float(board[x][y] / heighest))
+            if(heighest == 0):
+                b2.append(0)
+            else:
+                b2.append(float(board[x][y] / heighest))
 
     return [b2]
 
@@ -106,6 +109,12 @@ def log2board(board):
 def splitboard(board):
     return board.tolist()
 
+def average(numbers):
+    total = 0
+    for i in numbers:
+        total += i
+    total = total/len(numbers)
+    return total
 
 if __name__ == "__main__":
 
@@ -115,16 +124,22 @@ if __name__ == "__main__":
     ailib.score_toplevel_move.argtypes = [ctypes.c_uint64, ctypes.c_int]
     ailib.score_toplevel_move.restype = ctypes.c_float
 
-    it = 18000
+    it = 305000
 
     if it == 0:
-        net_8 =  neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 200, 200, 100, 4])
-        net_9 =  neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 400, 200, 200, 100, 4])
-        net_10 = neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 400, 400, 200, 200, 100, 4])
+        net_8_1 =  neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 200, 200, 100, 4])
+        net_8_2 =  neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 200, 200, 100, 4])
+        net_9_1 =  neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 400, 200, 200, 100, 4])
+        net_9_2 =  neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 400, 200, 200, 100, 4])
+        net_10_1 = neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 400, 400, 200, 200, 100, 4])
+        net_10_2 = neuralnet.TrainNeuralNet([16, 256, 2400, 1600, 800, 400, 400, 400, 200, 200, 100, 4])
     else:
-        net_8 = neuralnet.loadNeuralNet('net_8_' + str(it))
-        net_9 = neuralnet.loadNeuralNet('net_9_' + str(it))
-        net_10 = neuralnet.loadNeuralNet('net_10_' + str(it))
+        net_8_1 =  neuralnet.loadNeuralNet('net_8_1_' + str(it))
+        net_8_2 =  neuralnet.loadNeuralNet('net_8_2_' + str(it))
+        net_9_1 =  neuralnet.loadNeuralNet('net_9_1_' + str(it))
+        net_9_2 =  neuralnet.loadNeuralNet('net_9_2_' + str(it))
+        net_10_1 = neuralnet.loadNeuralNet('net_10_1_' + str(it))
+        net_10_2 = neuralnet.loadNeuralNet('net_10_2_' + str(it))
 
     with tf.Session() as sess:
 
@@ -135,18 +150,23 @@ if __name__ == "__main__":
         r = 0
         j = 1
         done = False
-        for i in range(it, 300000):
-            splitgrid = splitboard(currGame.grid_)
+
+        cost_8 = []
+        cost_9 = []
+        cost_10 = []
+        for i in range(it, 600000):
+            splitgrid = log2board(splitboard(currGame.grid_))
 
             heighest = find_heighest(splitgrid)
-            if heighest == 4096 or done:
+            if heighest == 13 or done:
                 currGame = reset.clone()
-                heighest = 1
+                splitgrid = splitboard(currGame.grid_)
+                heighest = find_heighest(splitgrid)
                 r += 1
                 done = False
 
             #Get the best move
-            m_number = find_best_move(log2board(splitgrid))
+            m_number = find_best_move(splitgrid)
 
 
             #Transpose board
@@ -156,10 +176,21 @@ if __name__ == "__main__":
             expected_values = one_hot(m_number)
 
             #Train data on move
-            #i_v = m.data & e_v = best_move
-            sess.run(net_8.train_step, feed_dict={net_8.input_placeholder:  transposed_board, net_8.expected_placeholder: expected_values})
-            sess.run(net_9.train_step, feed_dict={net_9.input_placeholder:  transposed_board, net_9.expected_placeholder: expected_values})
-            sess.run(net_10.train_step, feed_dict={net_10.input_placeholder: transposed_board, net_10.expected_placeholder: expected_values})
+            if(heighest > 0):
+                _, c8_1 = sess.run([net_8_1.train_step, net_8_1.cost], feed_dict={net_8_1.input_placeholder:  transposed_board, net_8_1.expected_placeholder: expected_values})
+                _, c8_2 = sess.run([net_8_2.train_step, net_8_2.cost], feed_dict={net_8_2.input_placeholder:  transposed_board, net_8_2.expected_placeholder: expected_values})
+                _, c9_1 = sess.run([net_9_1.train_step, net_9_1.cost], feed_dict={net_9_1.input_placeholder:  transposed_board, net_9_1.expected_placeholder: expected_values})
+                _, c9_2 = sess.run([net_9_2.train_step, net_9_2.cost], feed_dict={net_9_2.input_placeholder:  transposed_board, net_9_2.expected_placeholder: expected_values})
+                _, c10_1 = sess.run([net_10_1.train_step, net_10_1.cost], feed_dict={net_10_1.input_placeholder: transposed_board, net_10_1.expected_placeholder: expected_values})
+                _, c10_2 = sess.run([net_10_2.train_step, net_10_2.cost], feed_dict={net_10_2.input_placeholder: transposed_board, net_10_2.expected_placeholder: expected_values})
+
+
+            cost_8.append(c8_1)
+            cost_8.append(c8_2)
+            cost_9.append(c9_1)
+            cost_9.append(c9_2)
+            cost_10.append(c10_1)
+            cost_10.append(c10_2)
 
             old_game = currGame.clone()
             new_game = currGame.clone()
@@ -173,14 +204,31 @@ if __name__ == "__main__":
                 done = True
 
             print(i, r)
-            if (i + 1) % 1000 == 0:
-                print(sess.run(net_8.cost, feed_dict={net_8.input_placeholder:  transposed_board, net_8.expected_placeholder: expected_values}))
-                print(sess.run(net_9.cost, feed_dict={net_9.input_placeholder:  transposed_board, net_9.expected_placeholder: expected_values}))
-                print(sess.run(net_10.cost, feed_dict={net_10.input_placeholder:  transposed_board, net_10.expected_placeholder: expected_values}))
+
+            if (i + 1) % 250 == 0:
+
+                print(c8_1, c8_2)
+                print(c9_1, c9_2)
+                print(c10_1, c10_2)
+
+                print(average(cost_8))
+                print(average(cost_9))
+                print(average(cost_10))
 
                 print(heighest)
 
+
+            if (i + 1) % 5000 == 0:
+
+
+                cost_8 = []
+                cost_9 = []
+                cost_10 = []
+
                 print("saving")
-                neuralnet.saveTrainNeuralNet(net_8, sess, ('net_8_' + str(i + 1)))
-                neuralnet.saveTrainNeuralNet(net_9, sess, ('net_9_' + str(i + 1)))
-                neuralnet.saveTrainNeuralNet(net_10, sess, ('net_10_' + str(i + 1)))
+                neuralnet.saveTrainNeuralNet(net_8_1, sess, ('net_8_1_' + str(i + 1)))
+                neuralnet.saveTrainNeuralNet(net_8_2, sess, ('net_8_2_' + str(i + 1)))
+                neuralnet.saveTrainNeuralNet(net_9_1, sess, ('net_9_1_' + str(i + 1)))
+                neuralnet.saveTrainNeuralNet(net_9_2, sess, ('net_9_2_' + str(i + 1)))
+                neuralnet.saveTrainNeuralNet(net_10_1, sess, ('net_10_1_' + str(i + 1)))
+                neuralnet.saveTrainNeuralNet(net_10_2, sess, ('net_10_2_' + str(i + 1)))

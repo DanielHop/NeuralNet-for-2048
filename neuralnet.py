@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 def gen_weights(x, y):
-    weights = tf.Variable(tf.truncated_normal([x, y], stddev=1./tf.sqrt(2.)))
+    weights = tf.Variable(tf.truncated_normal([x, y], stddev=1./10))
     return weights
 
 def gen_biases(x):
@@ -136,7 +136,7 @@ class TrainNeuralNet:
             prev_layer = self.values[i]
 
             if(i > 0):
-                prev_layer = tf.nn.sigmoid(prev_layer)
+                prev_layer = tf.nn.relu(prev_layer)
 
             layer_value = tf.matmul(prev_layer, self.weights[i]) + self.biases[i]
 
@@ -147,4 +147,4 @@ class TrainNeuralNet:
         self.softmax_output = tf.nn.softmax(self.output) * 100
 
         self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.output, labels=self.expected_placeholder))
-        self.train_step = tf.train.GradientDescentOptimizer(1e-3).minimize(self.cost)
+        self.train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(self.cost)
